@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  process-throttler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: process-throttler:latest
+    container_name: process-throttler
+    hostname: process-throttler
+    
+    # Required for cgroup access
+    privileged: true
+    pid: host
+    
+    # Mount cgroup filesystem
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /proc:/host/proc:ro
+      - ./configs:/etc/process-throttler:rw
+      - throttler-logs:/var/log/process-throttler
+      - throttler-backups:/data/backups
+      
+    environment:
+      - PROCESS_THROTTLER_CONFIG=/etc/process-throttler/config.yaml
+      - PROCESS_THROTTLER_PROFILES=/etc/process-throttler/profiles
+      - PROCESS_THROTTLER_LOGS=/var/log/process-throttler
+      - TZ=UTC
+      
+    # Resource limits for the container itself
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+          
+    restart: unless-stopped
+    
+    # Override default command to run in daemon mode
+    command: ["daemon"]
+    
+    networks:
+      - process-throttler-net
+      
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Prometheus exporter for metrics
+  prometheus-exporter:
+    image: prom/node-exporter:latest
+    container_name: process-throttler-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    networks:
+      - process-throttler-net
+    profiles:
+      - monitoring
+
+volumes:
+  throttler-logs:
+    driver: local
+  throttler-backups:
+    driver: local
+
+networks:
+  process-throttler-net:
+    driver: bridge

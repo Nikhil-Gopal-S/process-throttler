@@ -1,0 +1,48 @@
+version: "1.0"
+
+# Default resource limits applied to all throttled processes
+default_limits:
+  cpu_quota: 50000      # 50% CPU (50ms out of 100ms)
+  cpu_period: 100000    # 100ms period
+  cpu_shares: 512       # CPU shares (relative weight)
+  memory_limit: 536870912  # 512MB
+  pids_limit: 500       # Maximum 500 processes
+  blkio_weight: 300     # Block I/O weight
+
+# Throttling rules
+rules:
+  - name: "limit-backup-processes"
+    description: "Limit backup processes to 30% CPU and 1GB memory"
+    matcher:
+      pattern: "backup.*"
+      match_type: "name"
+      exact_match: false
+    limits:
+      cpu_quota: 30000        # 30% CPU
+      cpu_period: 100000      # 100ms
+      memory_limit: 1073741824  # 1GB
+      pids_limit: 100
+    enabled: true
+    priority: 1
+
+  - name: "limit-browser-processes"
+    description: "Limit browser processes"
+    matcher:
+      pattern: "chrome|firefox"
+      match_type: "name"
+      exact_match: false
+    limits:
+      cpu_quota: 80000        # 80% CPU
+      cpu_period: 100000      # 100ms
+      memory_limit: 2147483648  # 2GB
+      pids_limit: 200
+    enabled: false  # Disabled by default
+    priority: 2
+
+# Application settings
+settings:
+  update_interval: 5s
+  log_level: "info"
+  cgroup_root: "/sys/fs/cgroup"
+  enable_safety_mode: true
+  dry_run: false

@@ -1,0 +1,123 @@
+name: production-web
+version: "1.0"
+description: Production web server configuration with critical process protection
+created: 2024-12-01T10:30:00Z
+modified: 2024-12-01T10:30:00Z
+author: admin@company.com
+
+# Critical processes that need protection
+critical_processes:
+  - pattern: "nginx.*"
+    protection_level: "maximum"
+    restart_policy: "always"
+    oom_score_adj: -1000  # Never kill by OOM
+    priority: -20  # Highest priority
+    health_check:
+      type: "port"
+      target: "80,443"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    resource_reserve:
+      cpu_percent: 20
+      memory_mb: 512
+      
+  - pattern: "mysql.*|mariadb.*"
+    protection_level: "high"
+    restart_policy: "on-failure"
+    oom_score_adj: -800
+    priority: -15
+    health_check:
+      type: "port"
+      target: "3306"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    dependencies:
+      - "systemd"
+    resource_reserve:
+      cpu_percent: 30
+      memory_mb: 2048
+      io_bandwidth_mb: 100
+      
+  - pattern: "redis-server"
+    protection_level: "high"
+    restart_policy: "on-failure"
+    oom_score_adj: -800
+    priority: -15
+    health_check:
+      type: "port"
+      target: "6379"
+      interval: 20s
+      timeout: 3s
+      retries: 2
+    resource_reserve:
+      cpu_percent: 10
+      memory_mb: 256
+
+# Throttling rules for non-critical processes
+throttling_rules:
+  - name: "limit-backup-processes"
+    description: "Limit backup processes during business hours"
+    matcher:
+      pattern: "backup.*|rsync.*|tar.*"
+      match_type: "name"
+      exact_match: false
+    limits:
+      cpu_quota: 30000        # 30% CPU
+      cpu_period: 100000      # 100ms
+      memory_limit: 1073741824  # 1GB
+      pids_limit: 50
+      blkio_weight: 100       # Low I/O priority
+    enabled: true
+    priority: 1
+    
+  - name: "limit-batch-jobs"
+    description: "Limit batch processing jobs"
+    matcher:
+      pattern: "batch_.*|cron.*"
+      match_type: "cmdline"
+      exact_match: false
+    limits:
+      cpu_quota: 50000        # 50% CPU
+      cpu_period: 100000      # 100ms
+      memory_limit: 2147483648  # 2GB
+      pids_limit: 100
+    enabled: true
+    priority: 2
+    
+  - name: "limit-development-tools"
+    description: "Limit development tools on production"
+    matcher:
+      pattern: "node|npm|yarn|python|java"
+      match_type: "name"
+      exact_match: false
+    limits:
+      cpu_quota: 20000        # 20% CPU
+      cpu_period: 100000      # 100ms
+      memory_limit: 536870912  # 512MB
+      pids_limit: 30
+    enabled: false  # Disabled by default, enable when needed
+    priority: 3
+
+# Schedule for different time periods
+schedule:
+  - time: "0 9 * * 1-5"  # Monday-Friday 9AM
+    profile_name: "business-hours"
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    
+  - time: "0 18 * * 1-5"  # Monday-Friday 6PM
+    profile_name: "after-hours"
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    
+  - time: "0 0 * * 0,6"  # Weekend midnight
+    profile_name: "weekend-maintenance"
+    days: ["Sat", "Sun"]
+
+# Application settings
+settings:
+  update_interval: 5s
+  log_level: "info"
+  cgroup_root: "/sys/fs/cgroup"
+  enable_safety_mode: true
+  dry_run: false
