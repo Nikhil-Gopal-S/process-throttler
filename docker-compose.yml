@@ -40,7 +40,8 @@ services:
     restart: unless-stopped
     
     # Override default command to run in daemon mode
-    command: ["daemon"]
+    entrypoint: tail
+    command: ["-f", "/dev/null"] 
     
     networks:
       - process-throttler-net
