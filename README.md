@@ -158,6 +158,12 @@ throttling_rules:
 - **Package Distribution**: Multi-platform builds (DEB, RPM, Docker)
 - **Installation Scripts**: Automated installation and setup
 
+### Phase 4 (Complete) ✅
+- **Dynamic Throttling Algorithms**: Gradual, adaptive, and time-based throttling
+- **Prometheus Integration**: Complete metrics export for monitoring
+- **Webhook Notifications**: Real-time alerts for critical events
+- **Advanced Policies**: Pre-configured policies for common scenarios
+
 ## Installation
 
 ### Quick Install (Linux)
@@ -234,14 +240,129 @@ sudo rpm -ivh process-throttler-1.0.0-1.x86_64.rpm
 ./process-throttler emergency resume
 ```
 
-## Development Roadmap
+## Advanced Features
 
-### Phase 4: Advanced Features (Next)
-- [ ] Dynamic throttling algorithms
-- [ ] Gradual enforcement
-- [ ] Time-based rules
-- [ ] External system integration (Prometheus, webhooks)
+### Dynamic Throttling
+```bash
+# Apply gradual throttling (smooth transition over 5 minutes)
+./process-throttler dynamic apply <pid> --policy gradual --cpu 30%
+
+# Apply adaptive throttling (self-adjusting based on load)
+./process-throttler dynamic apply <pid> --policy adaptive --cpu 50%
+
+# List active dynamic throttles
+./process-throttler dynamic list
+
+# View available policies
+./process-throttler dynamic policies
+```
+
+### Prometheus Metrics
+```bash
+# Start metrics server
+./process-throttler metrics start --address :9090
+
+# Access metrics
+curl http://localhost:9090/metrics
+
+# Available metrics:
+# - process_throttler_processes_total
+# - process_throttler_resources_cpu_usage_percent
+# - process_throttler_critical_process_health
+# - process_throttler_system_load_average
+```
+
+### Webhook Notifications
+```bash
+# Add a Slack webhook
+./process-throttler webhook add slack https://hooks.slack.com/... \
+  --events emergency_stop,critical_process_down
+
+# Add a PagerDuty webhook
+./process-throttler webhook add pagerduty https://events.pagerduty.com/... \
+  --secret YOUR_API_KEY \
+  --events critical_process_down,system_overload
+
+# Test webhook
+./process-throttler webhook test slack
+
+# List webhooks
+./process-throttler webhook list
+```
+
+## Complete Feature Set
+
+### Core Features
+- ✅ Process discovery by name, PID, command line, or user
+- ✅ Resource throttling using cgroups v1/v2
+- ✅ YAML-based configuration management
+- ✅ Dry-run mode for safe testing
+
+### Advanced Management
+- ✅ Profile management with import/export
+- ✅ Critical process protection with auto-restart
+- ✅ Health monitoring (port, HTTP, command, file)
+- ✅ Validation framework with system checks
+
+### Security & Operations
+- ✅ Comprehensive audit logging
+- ✅ Configuration backup and restore
+- ✅ Emergency stop mechanism
+- ✅ Signal-based controls (SIGUSR1/SIGUSR2)
+
+### Monitoring & Integration
+- ✅ Prometheus metrics export
+- ✅ Webhook notifications for events
+- ✅ Dynamic throttling algorithms
+- ✅ Time-based rule enforcement
+
+### Distribution
+- ✅ Multi-platform builds (Linux amd64, 386, arm64, arm)
+- ✅ DEB and RPM packages
+- ✅ Docker images with docker-compose
+- ✅ Universal installation script
+
+## Example Use Cases
+
+### 1. Production Web Server
+```yaml
+# Production profile with critical process protection
+critical_processes:
+  - pattern: "nginx.*"
+    protection_level: "maximum"
+    health_check:
+      type: "port"
+      target: "80,443"
+throttling_rules:
+  - name: "limit-background"
+    matcher:
+      pattern: "backup.*|cron.*"
+    limits:
+      cpu_quota: 20000  # 20% during business hours
+```
+
+### 2. Development Environment
+```bash
+# Limit resource-hungry development tools
+./process-throttler dynamic apply "node" --policy adaptive --cpu 60%
+./process-throttler dynamic apply "docker" --policy gradual --cpu 40% --memory 2GB
+```
+
+### 3. Emergency Response
+```bash
+# System under stress - emergency stop all throttling
+./process-throttler emergency stop "CPU overload detected"
+
+# After investigation, resume with adjusted limits
+./process-throttler emergency resume
+./process-throttler profile activate low-resource-profile
+```
+
+## Future Roadmap
 - [ ] Web-based management interface
+- [ ] Kubernetes operator
+- [ ] Machine learning for predictive throttling
+- [ ] Integration with cloud monitoring services
 
 ## Requirements
 

@@ -23,6 +23,7 @@ const (
     ErrInvalidOperation    ErrorType = "INVALID_OPERATION"
     ErrProcessNotFound     ErrorType = "PROCESS_NOT_FOUND"
     ErrMaxRetriesExceeded  ErrorType = "MAX_RETRIES_EXCEEDED"
+    ErrResourceExhausted   ErrorType = "RESOURCE_EXHAUSTED"
 )
 
 // ProcessThrottlerError represents a custom error with type and context

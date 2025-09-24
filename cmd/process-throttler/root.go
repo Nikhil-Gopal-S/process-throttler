@@ -16,9 +16,12 @@ import (
     "github.com/yourusername/process-throttler/internal/config"
     "github.com/yourusername/process-throttler/internal/discovery"
     "github.com/yourusername/process-throttler/internal/emergency"
+    "github.com/yourusername/process-throttler/internal/metrics"
     "github.com/yourusername/process-throttler/internal/profile"
     "github.com/yourusername/process-throttler/internal/protection"
+    "github.com/yourusername/process-throttler/internal/throttle"
     "github.com/yourusername/process-throttler/internal/types"
+    "github.com/yourusername/process-throttler/internal/webhook"
 )
 
 var (
@@ -148,7 +151,7 @@ func init() {
     
     // Add subcommands
     configCmd.AddCommand(configShowCmd, configExampleCmd)
-    rootCmd.AddCommand(discoverCmd, listCmd, throttleCmd, statusCmd, configCmd, profileCmd, validateCmd, auditCmd, backupCmd, emergencyCmd)
+    rootCmd.AddCommand(discoverCmd, listCmd, throttleCmd, statusCmd, configCmd, profileCmd, validateCmd, auditCmd, backupCmd, emergencyCmd, dynamicCmd, metricsCmd, webhookCmd)
     
     // Bind flags to viper
     viper.BindPFlag("cgroup_root", rootCmd.PersistentFlags().Lookup("cgroup-root"))
@@ -211,6 +214,17 @@ func initializeComponents() {
     if cgroupManager != nil && protectionMgr != nil {
         stopManager = emergency.NewStopManager(cgroupManager, protectionMgr, backupManager, auditLogger)
     }
+    
+    // Initialize dynamic throttler
+    if cgroupManager != nil && processDiscovery != nil && auditLogger != nil {
+        dynamicThrottler = throttle.NewDynamicThrottler(cgroupManager, processDiscovery, auditLogger)
+    }
+    
+    // Initialize metrics collector
+    metricsCollector = metrics.NewCollector()
+    
+    // Initialize webhook notifier
+    webhookNotifier = webhook.NewNotifier(5)
 }
 
 func runDiscoverCmd(cmd *cobra.Command, args []string) {
