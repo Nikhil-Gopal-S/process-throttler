@@ -358,11 +358,57 @@ throttling_rules:
 ./process-throttler profile activate low-resource-profile
 ```
 
+## Recent Improvements
+
+### Critical Bug Fixes
+- **Webhook Persistence**: Fixed critical bug where webhook configurations were lost between command executions. Webhooks are now persisted to disk.
+- **Emergency Stop Safety**: Improved to prevent deletion of system-critical cgroups (Docker, Kubernetes, systemd).
+- **Container Path Handling**: Automatic detection of containerized environments with proper path translation.
+
+### New Features
+- **Daemon Management**: Comprehensive daemon management with status tracking and feature detection
+  ```bash
+  # Start daemon for continuous monitoring
+  ./process-throttler daemon start
+  
+  # Check daemon status
+  ./process-throttler daemon status
+  ```
+
+- **Health Check System**: Comprehensive health checks to verify configuration and dependencies
+  ```bash
+  # Run health checks
+  ./process-throttler health --check-all
+  ```
+
+- **Enhanced UX**: Clear error messages when features require the daemon to be running
+
 ## Future Roadmap
 - [ ] Web-based management interface
 - [ ] Kubernetes operator
 - [ ] Machine learning for predictive throttling
 - [ ] Integration with cloud monitoring services
+
+## Understanding CPU Limits
+
+CPU limits in Linux cgroups are **work-conserving** - they only restrict CPU usage when there's contention for resources. This means:
+
+- On an **idle system**: A process limited to 30% can use 100% of available CPU
+- On a **busy system**: The same process will be throttled to its 30% limit
+- This is by design to maximize resource utilization
+
+### Verifying CPU Limits Are Working
+```bash
+# Check throttling statistics
+cat /sys/fs/cgroup/cpu/[group]/cpu.stat
+
+# Look for:
+# - nr_throttled: Number of times the group was throttled
+# - throttled_time: Total time spent being throttled
+
+# Test limits with CPU stress
+./process-throttler test cpu-limits --create-load
+```
 
 ## Requirements
 

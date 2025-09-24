@@ -6,8 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/yourusername/process-throttler/internal/audit"
 	"github.com/yourusername/process-throttler/pkg/errors"
@@ -17,6 +22,7 @@ import (
 type Notifier struct {
 	mu          sync.RWMutex
 	webhooks    map[string]*WebhookConfig
+	configFile  string  // Path to persistent webhook configuration
 	client      *http.Client
 	queue       chan *Notification
 	workers     int
@@ -83,8 +89,12 @@ func NewNotifier(workers int) *Notifier {
 	
 	ctx, cancel := context.WithCancel(context.Background())
 	
+	// Determine config file path
+	configFile := getWebhookConfigPath()
+	
 	n := &Notifier{
-		webhooks: make(map[string]*WebhookConfig),
+		webhooks:   make(map[string]*WebhookConfig),
+		configFile: configFile,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -100,6 +110,11 @@ func NewNotifier(workers int) *Notifier {
 		},
 	}
 	
+	// Load existing webhooks from disk
+	if err := n.loadWebhooks(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to load webhook configuration: %v\n", err)
+	}
+	
 	// Start workers
 	for i := 0; i < workers; i++ {
 		n.wg.Add(1)
@@ -107,6 +122,110 @@ func NewNotifier(workers int) *Notifier {
 	}
 	
 	return n
+}
+
+// getWebhookConfigPath determines the appropriate config file path
+func getWebhookConfigPath() string {
+	// Check if running in container
+	if isRunningInContainer() {
+		if hostPath := os.Getenv("PT_HOST_CONFIG_PATH"); hostPath != "" {
+			return filepath.Join(hostPath, "webhooks.yaml")
+		}
+	}
+	
+	// Try system config directory first
+	systemConfig := "/etc/process-throttler/webhooks.yaml"
+	if _, err := os.Stat(filepath.Dir(systemConfig)); err == nil {
+		return systemConfig
+	}
+	
+	// Fallback to user config directory
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(homeDir, ".config", "process-throttler", "webhooks.yaml")
+	}
+	
+	return systemConfig
+}
+
+// isRunningInContainer detects if the process is running inside a container
+func isRunningInContainer() bool {
+	// Check for Docker environment file
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	
+	// Check for containerd environment file
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		return true
+	}
+	
+	// Check cgroup for container signatures
+	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+		content := string(data)
+		if strings.Contains(content, "docker") || 
+		   strings.Contains(content, "containerd") || 
+		   strings.Contains(content, "kubepods") {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// saveWebhooks persists the webhook configuration to disk
+func (n *Notifier) saveWebhooks() error {
+	// Create config directory if it doesn't exist
+	configDir := filepath.Dir(n.configFile)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return errors.Wrap(err, "failed to create webhook config directory")
+	}
+	
+	// Marshal webhooks to YAML
+	data, err := yaml.Marshal(n.webhooks)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal webhooks")
+	}
+	
+	// Write atomically (write to temp file, then rename)
+	tempFile := n.configFile + ".tmp"
+	if err := os.WriteFile(tempFile, data, 0644); err != nil {
+		return errors.Wrap(err, "failed to write webhook config")
+	}
+	
+	// Atomic rename
+	if err := os.Rename(tempFile, n.configFile); err != nil {
+		os.Remove(tempFile)
+		return errors.Wrap(err, "failed to save webhook config")
+	}
+	
+	return nil
+}
+
+// loadWebhooks loads the webhook configuration from disk
+func (n *Notifier) loadWebhooks() error {
+	// Check if config file exists
+	if _, err := os.Stat(n.configFile); os.IsNotExist(err) {
+		// No config file yet, start with empty map
+		return nil
+	}
+	
+	// Read config file
+	data, err := os.ReadFile(n.configFile)
+	if err != nil {
+		return errors.Wrap(err, "failed to read webhook config")
+	}
+	
+	// Unmarshal webhooks
+	var webhooks map[string]*WebhookConfig
+	if err := yaml.Unmarshal(data, &webhooks); err != nil {
+		return errors.Wrap(err, "failed to parse webhook config")
+	}
+	
+	if webhooks != nil {
+		n.webhooks = webhooks
+	}
+	
+	return nil
 }
 
 // AddWebhook adds a webhook configuration
@@ -135,6 +254,14 @@ func (n *Notifier) AddWebhook(config *WebhookConfig) error {
 	}
 	
 	n.webhooks[config.Name] = config
+	
+	// Save to disk
+	if err := n.saveWebhooks(); err != nil {
+		// Rollback in-memory change
+		delete(n.webhooks, config.Name)
+		return errors.Wrap(err, "failed to save webhook configuration")
+	}
+	
 	return nil
 }
 
@@ -143,11 +270,20 @@ func (n *Notifier) RemoveWebhook(name string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	
-	if _, exists := n.webhooks[name]; !exists {
+	config, exists := n.webhooks[name]
+	if !exists {
 		return errors.New(errors.ErrNotFound, fmt.Sprintf("webhook '%s' not found", name))
 	}
 	
 	delete(n.webhooks, name)
+	
+	// Save to disk
+	if err := n.saveWebhooks(); err != nil {
+		// Rollback in-memory change
+		n.webhooks[name] = config
+		return errors.Wrap(err, "failed to save webhook configuration")
+	}
+	
 	return nil
 }
 

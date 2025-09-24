@@ -151,7 +151,7 @@ func init() {
     
     // Add subcommands
     configCmd.AddCommand(configShowCmd, configExampleCmd)
-    rootCmd.AddCommand(discoverCmd, listCmd, throttleCmd, statusCmd, configCmd, profileCmd, validateCmd, auditCmd, backupCmd, emergencyCmd, dynamicCmd, metricsCmd, webhookCmd)
+    rootCmd.AddCommand(discoverCmd, listCmd, throttleCmd, statusCmd, configCmd, profileCmd, validateCmd, auditCmd, backupCmd, emergencyCmd, dynamicCmd, metricsCmd, webhookCmd, daemonCmd)
     
     // Bind flags to viper
     viper.BindPFlag("cgroup_root", rootCmd.PersistentFlags().Lookup("cgroup-root"))

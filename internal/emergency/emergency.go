@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -420,17 +421,33 @@ func getCurrentUser() string {
 }
 
 func isSystemCgroup(name string) bool {
+	// Expanded list of system-critical cgroups that should never be deleted
 	systemGroups := []string{
 		"systemd",
 		"user.slice",
 		"system.slice",
 		"init.scope",
+		"docker",
+		"containerd",
+		"kubepods",
+		"machine.slice",
+		"podman",
+		"lxc",
 	}
 	
 	for _, sg := range systemGroups {
-		if name == sg || name == "/"+sg {
+		if name == sg || name == "/"+sg || strings.Contains(name, "/"+sg+"/") {
 			return true
 		}
+	}
+	
+	// Check if it's a cgroup we didn't create
+	// Our cgroups should have specific prefixes
+	if !strings.HasPrefix(name, "throttle_") && 
+	   !strings.HasPrefix(name, "dynamic_") && 
+	   !strings.HasPrefix(name, "pt_") {
+		// If it doesn't have our prefix, it's probably a system cgroup
+		return true
 	}
 	
 	return false
